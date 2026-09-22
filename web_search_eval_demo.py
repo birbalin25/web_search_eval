@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # MAGIC %md
 # MAGIC # Web Search MCP Evaluation — Demo
 # MAGIC Evaluates the Databricks built-in **`system.ai.web_search`** MCP service and the agent around it.
@@ -227,6 +231,9 @@ def metadata_propagation(inputs, trace) -> Feedback:
 # MAGIC ## Run `mlflow.genai.evaluate()`
 
 # COMMAND ----------
+
+import logging
+logging.getLogger("mlflow.tracking.context.registry").setLevel(logging.ERROR)
 
 cases = [r.asDict(recursive=True) for r in spark.table(f"{FQ}.eval_cases").collect()]
 
