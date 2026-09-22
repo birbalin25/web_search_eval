@@ -1,0 +1,66 @@
+# Databricks Asset Bundle — Web Search MCP evaluation framework
+#
+#   Validate:  databricks bundle validate -t dev    # or: -t prod
+#   Deploy:    databricks bundle deploy   -t dev     # or: -t prod
+#   Run:       databricks bundle run web_search_eval -t dev
+#
+# Both targets use the same workspace via the `fevm` profile (pinned below).
+# All configuration values live in variables.yml and are passed to the notebooks
+# as job parameters — nothing is hardcoded in the notebooks.
+bundle:
+  name: web_search_eval
+
+# Variable definitions are kept in variables.yml.
+include:
+  - variables.yml
+
+# Don't ship local build artifacts to the workspace.
+sync:
+  exclude:
+    - "__pycache__"
+    - "*.pyc"
+
+resources:
+  jobs:
+    web_search_eval:
+      name: web_search_eval
+      # Serverless: no job_clusters block — notebook tasks run on serverless compute.
+      tasks:
+        - task_key: generate_test_data
+          notebook_task:
+            notebook_path: ./web_search_eval_data_gen.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              dataset_version: ${var.dataset_version}
+
+        - task_key: run_evaluation
+          depends_on:
+            - task_key: generate_test_data
+          notebook_task:
+            notebook_path: ./web_search_eval_demo.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              dataset_version: ${var.dataset_version}
+              use_simulated: ${var.use_simulated}
+              experiment_name: ${var.experiment_name}
+              mcp_service_path: ${var.mcp_service_path}
+
+targets:
+  # Development: names resources with a [dev <user>] prefix and pauses schedules.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://fevm-serverless-stable-14ey07.cloud.databricks.com
+      profile: fevm
+
+  # Production: no [dev] prefix, schedules run as-defined. Production mode requires an explicit
+  # root_path so exactly one prod copy exists (swap in a service principal for a real prod).
+  prod:
+    mode: production
+    workspace:
+      host: https://fevm-serverless-stable-14ey07.cloud.databricks.com
+      profile: fevm
+      root_path: /Workspace/Users/birbal.das@databricks.com/.bundle/${bundle.name}/${bundle.target}
