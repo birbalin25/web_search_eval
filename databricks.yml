@@ -44,6 +44,34 @@ resources:
               use_simulated: ${var.use_simulated}
               mcp_service_path: ${var.mcp_service_path}
 
+    # Registers the built-in judges + custom scorers on the shared production experiment.
+    web_search_monitor:
+      name: web_search_monitor
+      tasks:
+        - task_key: register_scorers
+          notebook_task:
+            notebook_path: ./web_search_eval_monitor.py
+            base_parameters:
+              experiment_name: ${var.experiment_name}
+              judge_sample_rate: ${var.judge_sample_rate}
+              policy_sample_rate: ${var.policy_sample_rate}
+              monitor_action: ${var.monitor_action}
+
+    # LangChain tool-calling agent (Foundation Model via AI Gateway) that traces into the same experiment.
+    web_search_agent:
+      name: web_search_agent
+      tasks:
+        - task_key: run_agent
+          notebook_task:
+            notebook_path: ./web_search_agent.py
+            base_parameters:
+              llm_endpoint: ${var.llm_endpoint}
+              experiment_name: ${var.experiment_name}
+              allowed_domains: ${var.allowed_domains}
+              blocked_domains: ${var.blocked_domains}
+              use_simulated: ${var.use_simulated}
+              mcp_service_path: ${var.mcp_service_path}
+
 targets:
   # Development: names resources with a [dev <user>] prefix and pauses schedules.
   dev:

@@ -15,3 +15,26 @@ variables:
   mcp_service_path:
     description: Path of the managed web_search MCP service, appended to the workspace host.
     default: /ai-gateway/mcp-services/system.ai.web_search
+
+  # --- Agent + production-monitoring config ---
+  experiment_name:
+    description: Shared MLflow experiment (under the running user) for agent traces AND registered scorers.
+    default: web_search_agent_prod
+  llm_endpoint:
+    description: Databricks Foundation Model serving endpoint (via the Unity AI Gateway) for the agent.
+    default: databricks-meta-llama-3-3-70b-instruct
+  allowed_domains:
+    description: Agent web_search allowlist — comma-separated bare hostnames (empty = open web).
+    default: ""
+  blocked_domains:
+    description: Agent web_search blocklist — comma-separated bare hostnames.
+    default: example.com,example.org
+  judge_sample_rate:
+    description: Fraction of production traces scored by the LLM judges (0-1).
+    default: "1.0"
+  policy_sample_rate:
+    description: Fraction of production traces scored by the deterministic policy scorers (0-1).
+    default: "1.0"
+  monitor_action:
+    description: "web_search_eval_monitor action: start | stop | list."
+    default: start
