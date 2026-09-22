@@ -9,15 +9,9 @@ variables:
   schema:
     description: Schema for eval_cases and results.
     default: web_search_eval
-  dataset_version:
-    description: Version tag stamped on the seeded eval dataset.
-    default: demo_v1
   use_simulated:
     description: "true = offline simulated search; false = call the live system.ai.web_search MCP."
     default: "true"
-  experiment_name:
-    description: MLflow experiment name (created under the running user's home directory).
-    default: web_search_eval_demo
   mcp_service_path:
     description: Path of the managed web_search MCP service, appended to the workspace host.
     default: /ai-gateway/mcp-services/system.ai.web_search

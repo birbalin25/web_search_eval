@@ -32,7 +32,6 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-              dataset_version: ${var.dataset_version}
 
         - task_key: run_evaluation
           depends_on:
@@ -42,9 +41,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-              dataset_version: ${var.dataset_version}
               use_simulated: ${var.use_simulated}
-              experiment_name: ${var.experiment_name}
               mcp_service_path: ${var.mcp_service_path}
 
 targets:

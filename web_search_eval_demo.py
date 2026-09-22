@@ -25,30 +25,22 @@
 import json, re, requests
 from urllib.parse import urlparse
 
-# All config comes from the bundle (variables.yml -> job parameters). Nothing hardcoded here.
-dbutils.widgets.text("catalog", "", "Catalog")
-dbutils.widgets.text("schema", "", "Schema")
-dbutils.widgets.text("dataset_version", "", "Dataset version")
-dbutils.widgets.text("use_simulated", "", "Use simulated search (true/false)")
-dbutils.widgets.text("experiment_name", "", "MLflow experiment name")
-dbutils.widgets.text("mcp_service_path", "", "MCP service path (appended to workspace host)")
+# Widget defaults make the notebook runnable standalone; the bundle overrides them via job parameters.
+dbutils.widgets.text("catalog", "main", "Catalog")
+dbutils.widgets.text("schema", "web_search_eval", "Schema")
+dbutils.widgets.text("use_simulated", "true", "Use simulated search (true/false)")
+dbutils.widgets.text("mcp_service_path", "/ai-gateway/mcp-services/system.ai.web_search", "MCP service path")
 
 CATALOG = dbutils.widgets.get("catalog").strip()
 SCHEMA = dbutils.widgets.get("schema").strip()
-DATASET_VERSION = dbutils.widgets.get("dataset_version").strip()
-EXPERIMENT_NAME = dbutils.widgets.get("experiment_name").strip()
 MCP_SERVICE_PATH = dbutils.widgets.get("mcp_service_path").strip()
 # Fail safe: simulate unless explicitly told otherwise, so we never hit the live service by accident.
 USE_SIMULATED = dbutils.widgets.get("use_simulated").strip().lower() != "false"
-assert CATALOG and SCHEMA and DATASET_VERSION and EXPERIMENT_NAME and MCP_SERVICE_PATH, \
-    "Missing config — run via the bundle job, or set the catalog/schema/dataset_version/" \
-    "experiment_name/mcp_service_path widgets."
 FQ = f"`{CATALOG}`.`{SCHEMA}`"
 
 from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 HOST = w.config.host.rstrip("/")
-USER = w.current_user.me().user_name
 MCP_URL = f"{HOST}{MCP_SERVICE_PATH}"
 print("MCP endpoint:", MCP_URL, "| simulated:", USE_SIMULATED)
 
@@ -145,7 +137,7 @@ def simulated(query, allowed, blocked):
 # COMMAND ----------
 
 import mlflow
-mlflow.set_experiment(f"/Users/{USER}/{EXPERIMENT_NAME}")
+# Uses the default MLflow experiment (the notebook's own experiment on Databricks).
 
 @mlflow.trace(span_type="AGENT")
 def agent(query, allowed_domains=None, blocked_domains=None, require_allowlist=False):
@@ -236,8 +228,7 @@ def metadata_propagation(inputs, trace) -> Feedback:
 
 # COMMAND ----------
 
-cases = [r.asDict(recursive=True) for r in
-         spark.table(f"{FQ}.eval_cases").filter(f"dataset_version = '{DATASET_VERSION}'").collect()]
+cases = [r.asDict(recursive=True) for r in spark.table(f"{FQ}.eval_cases").collect()]
 
 eval_data = [{
     "inputs": {"query": c["query"],
@@ -250,7 +241,7 @@ eval_data = [{
 def predict_fn(query, allowed_domains=None, blocked_domains=None, require_allowlist=False):
     return agent(query, allowed_domains, blocked_domains, require_allowlist)
 
-with mlflow.start_run(run_name=EXPERIMENT_NAME) as run:
+with mlflow.start_run(run_name="web_search_eval") as run:
     results = mlflow.genai.evaluate(
         data=eval_data,
         predict_fn=predict_fn,
@@ -264,7 +255,7 @@ print(json.dumps(results.metrics, indent=2, default=str))
 
 # MAGIC %md
 # MAGIC ## Results
-# MAGIC Aggregate metrics are printed above; open the **MLflow experiment** (named by the `experiment_name` variable, under your home directory)
+# MAGIC Aggregate metrics are printed above; open the **MLflow experiment** (the notebook's default experiment)
 # MAGIC for per-case scores, rationales, and the full trace of each `web_search` call — including the exact
 # MAGIC `params._meta` that was sent. The `block_spark` case is expected to **fail `domain_compliance`** in
 # MAGIC simulated mode (a blocked domain was intentionally injected), which demonstrates the scorer working.

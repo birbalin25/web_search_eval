@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Web Search Eval — Test Data Generation
-# MAGIC Creates the Unity Catalog schema and seeds a small, **versioned** `eval_cases` table that the
+# MAGIC Creates the Unity Catalog schema and seeds a small `eval_cases` table that the
 # MAGIC `web_search_eval_demo` notebook reads. Four representative cases:
 # MAGIC * **allowlist** — citations must stay within approved domains
 # MAGIC * **blocklist** — an excluded domain must not appear in citations
@@ -10,16 +10,12 @@
 
 # COMMAND ----------
 
-# Config is supplied by the bundle (variables.yml -> job parameters). Nothing hardcoded here.
-dbutils.widgets.text("catalog", "", "Catalog")
-dbutils.widgets.text("schema", "", "Schema")
-dbutils.widgets.text("dataset_version", "", "Dataset version")
+# Widget defaults make the notebook runnable standalone; the bundle overrides them via job parameters.
+dbutils.widgets.text("catalog", "main", "Catalog")
+dbutils.widgets.text("schema", "web_search_eval", "Schema")
 
 CATALOG = dbutils.widgets.get("catalog").strip()
 SCHEMA = dbutils.widgets.get("schema").strip()
-DATASET_VERSION = dbutils.widgets.get("dataset_version").strip()
-assert CATALOG and SCHEMA and DATASET_VERSION, \
-    "Missing config — run via the bundle job, or set the catalog/schema/dataset_version widgets."
 FQ = f"`{CATALOG}`.`{SCHEMA}`"
 
 # COMMAND ----------
@@ -27,8 +23,8 @@ FQ = f"`{CATALOG}`.`{SCHEMA}`"
 spark.sql(f"CREATE CATALOG IF NOT EXISTS `{CATALOG}`")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {FQ}")
 spark.sql(f"""
-CREATE TABLE IF NOT EXISTS {FQ}.eval_cases (
-  case_id STRING, dataset_version STRING, query STRING,
+CREATE OR REPLACE TABLE {FQ}.eval_cases (
+  case_id STRING, query STRING,
   allowed_domains ARRAY<STRING>, blocked_domains ARRAY<STRING>, require_allowlist BOOLEAN,
   expected_facts ARRAY<STRING>, should_abstain BOOLEAN, notes STRING
 ) USING DELTA
@@ -61,10 +57,8 @@ cases = [
          notes="Allowlist REQUIRED but empty -> must fail closed (no call, no answer)."),
 ]
 
-rows = [dict(**c, dataset_version=DATASET_VERSION) for c in cases]
 schema = spark.table(f"{FQ}.eval_cases").schema  # explicit schema handles None / empty-array columns
-spark.sql(f"DELETE FROM {FQ}.eval_cases WHERE dataset_version = '{DATASET_VERSION}'")
-spark.createDataFrame(rows, schema=schema).write.mode("append").saveAsTable(f"{FQ}.eval_cases")
+spark.createDataFrame(cases, schema=schema).write.mode("append").saveAsTable(f"{FQ}.eval_cases")
 
-print(f"Seeded {len(rows)} cases into {CATALOG}.{SCHEMA}.eval_cases (version={DATASET_VERSION})")
-display(spark.table(f"{FQ}.eval_cases").filter(f"dataset_version = '{DATASET_VERSION}'"))
+print(f"Seeded {len(cases)} cases into {CATALOG}.{SCHEMA}.eval_cases")
+display(spark.table(f"{FQ}.eval_cases"))
