@@ -9,8 +9,7 @@
 # MAGIC * **`_meta` propagation** — the agent actually sends the domains in `params._meta` (a *sibling* of `arguments`)
 # MAGIC
 # MAGIC **Contract:** tool `web_search`; query in `params.arguments.query`; domains in `params._meta`
-# MAGIC (bare hostnames, subdomains included); an empty allowlist is **not** deny-all, so the agent
-# MAGIC **fails closed** when an allowlist is required but empty. Endpoint:
+# MAGIC (bare hostnames, subdomains included). Endpoint:
 # MAGIC `https://<host>/ai-gateway/mcp-services/system.ai.web_search`.
 # MAGIC
 # MAGIC Run `web_search_eval_data_gen` first. Set `use_simulated=false` to hit the live service.
@@ -132,7 +131,7 @@ def simulated(query, allowed, blocked):
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## The agent — validates config, **fails closed**, calls the tool, traces the exact request
+# MAGIC ## The agent — validates config, calls the tool, traces the exact request
 
 # COMMAND ----------
 
@@ -140,16 +139,10 @@ import mlflow
 # Uses the default MLflow experiment (the notebook's own experiment on Databricks).
 
 @mlflow.trace(span_type="AGENT")
-def agent(query, allowed_domains=None, blocked_domains=None, require_allowlist=False):
+def agent(query, allowed_domains=None, blocked_domains=None):
     allowed = [d for d in (allowed_domains or []) if valid_host(d)]
     blocked = [d for d in (blocked_domains or []) if valid_host(d)]
     with mlflow.start_span(name="web_search_call", span_type="TOOL") as sp:
-        # fail closed: empty allowlist is NOT deny-all, so refuse rather than search unrestricted
-        if require_allowlist and not allowed:
-            sp.set_inputs({"params": None, "policy": {"allowed": allowed, "blocked": blocked}})
-            answer = "I can't answer: an allowlist is required but none is configured (failing closed)."
-            sp.set_outputs({"answer": answer, "citations": []})
-            return answer
         params = build_params(query, allowed, blocked)
         sp.set_inputs({"params": params})             # <-- the exact request scorers will audit
         if USE_SIMULATED:
@@ -205,11 +198,8 @@ def metadata_propagation(inputs, trace) -> Feedback:
     allowed = sorted(host_of(d) for d in (inputs.get("allowed_domains") or []) if valid_host(d))
     blocked = sorted(host_of(d) for d in (inputs.get("blocked_domains") or []) if valid_host(d))
     wire = _wire(trace)
-    if wire is None:  # no call was made
-        ok = bool(inputs.get("require_allowlist")) and not allowed
-        return Feedback(value="pass" if ok else "fail",
-                        rationale="No call — correctly failed closed." if ok
-                                  else "No web_search_call captured.")
+    if wire is None:  # a web_search call should always have been made
+        return Feedback(value="fail", rationale="No web_search_call captured.")
     meta = wire.get("_meta") or {}
     sent_allowed = sorted(host_of(x) for x in (meta.get("allowed_domains") or []))
     sent_blocked = sorted(host_of(x) for x in (meta.get("blocked_domains") or []))
@@ -233,13 +223,12 @@ cases = [r.asDict(recursive=True) for r in spark.table(f"{FQ}.eval_cases").colle
 eval_data = [{
     "inputs": {"query": c["query"],
                "allowed_domains": c["allowed_domains"] or [],
-               "blocked_domains": c["blocked_domains"] or [],
-               "require_allowlist": bool(c["require_allowlist"])},
+               "blocked_domains": c["blocked_domains"] or []},
     "expectations": {"expected_facts": c["expected_facts"]} if c["expected_facts"] else {},
 } for c in cases]
 
-def predict_fn(query, allowed_domains=None, blocked_domains=None, require_allowlist=False):
-    return agent(query, allowed_domains, blocked_domains, require_allowlist)
+def predict_fn(query, allowed_domains=None, blocked_domains=None):
+    return agent(query, allowed_domains, blocked_domains)
 
 with mlflow.start_run(run_name="web_search_eval") as run:
     results = mlflow.genai.evaluate(
