@@ -50,8 +50,7 @@ cases = [
          notes="Ground-truth correctness check."),
 ]
 
-schema = spark.table(f"{FQ}.eval_cases").schema  # explicit schema handles None / empty-array columns
-spark.createDataFrame(cases, schema=schema).write.mode("append").saveAsTable(f"{FQ}.eval_cases")
+spark.createDataFrame(cases).select("case_id", "query", "allowed_domains", "blocked_domains", "expected_facts", "notes").write.option("overwriteSchema", "true").mode("overwrite").saveAsTable(f"{FQ}.eval_cases")
 
 print(f"Seeded {len(cases)} cases into {CATALOG}.{SCHEMA}.eval_cases")
 display(spark.table(f"{FQ}.eval_cases"))

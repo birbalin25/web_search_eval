@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 # Widget defaults make the notebook runnable standalone; the bundle overrides them via job parameters.
 dbutils.widgets.text("catalog", "main", "Catalog")
 dbutils.widgets.text("schema", "web_search_eval", "Schema")
-dbutils.widgets.text("use_simulated", "true", "Use simulated search (true/false)")
+dbutils.widgets.text("use_simulated", "false", "Use simulated search (true/false)")
 dbutils.widgets.text("mcp_service_path", "/ai-gateway/mcp-services/system.ai.web_search", "MCP service path")
 dbutils.widgets.text("experiment_name", "web_search_eval_demo", "MLflow experiment name")
 
@@ -84,16 +84,6 @@ def build_params(query, allowed, blocked):
     if meta: params["_meta"] = meta
     return params
 
-def _result_json(resp):
-    """MCP replies either as plain JSON or as an SSE stream — handle both."""
-    if "text/event-stream" in resp.headers.get("Content-Type", ""):
-        for line in resp.text.splitlines():
-            if line.startswith("data:"):
-                obj = json.loads(line[len("data:"):].strip())
-                if isinstance(obj, dict) and ("result" in obj or "error" in obj):
-                    return obj
-        return {}
-    return resp.json()
 
 def call_web_search(params):
     """Synchronous MCP tools/call — a single POST, no async/threads. The Gateway endpoint accepts a
@@ -102,10 +92,8 @@ def call_web_search(params):
     headers["Accept"] = "application/json, text/event-stream"
     resp = requests.post(MCP_URL, timeout=120, headers=headers,
                          json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params})
-    obj = _result_json(resp)
-    if "error" in obj:
-        raise RuntimeError(obj["error"])
-    return obj.get("result", {})
+
+    return resp.json()
 
 URL_RE = re.compile(r"https?://[^\s\)\]\}\>\"']+")
 
