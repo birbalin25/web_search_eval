@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # Web Search Tool-Calling Agent (LangChain + Foundation Model via AI Gateway)
-# MAGIC A tool-calling agent built with **LangGraph / LangChain** on Databricks:
+# MAGIC A tool-calling agent built with **LangChain** (`ChatDatabricks.bind_tools()`) on Databricks:
 # MAGIC * The LLM is a Databricks **Foundation Model served through the Unity AI Gateway** (`ChatDatabricks`).
 # MAGIC * One of its tools is the built-in **`system.ai.web_search`** MCP service, called with the app's
 # MAGIC   domain policy in `params._meta` (the model never chooses the domains).
@@ -14,7 +14,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -qU "mlflow[databricks]>=3.1" "langchain>=1.0" databricks-langchain langgraph langchain-core databricks-sdk
+# MAGIC %pip install -qU "mlflow[databricks]>=3.1" databricks-langchain langchain-core databricks-sdk
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -149,6 +149,9 @@ def web_search(query: str) -> str:
 
 # MAGIC %md
 # MAGIC ## Build the agent — Foundation Model (AI Gateway) + tools
+# MAGIC Uses `ChatDatabricks.bind_tools()` with a small explicit tool-calling loop — deliberately **no**
+# MAGIC `langgraph` / `create_agent` dependency, so the notebook stays stable across the frequent
+# MAGIC LangChain/LangGraph releases (which have repeatedly moved the agent-factory import).
 
 # COMMAND ----------
 
@@ -156,27 +159,17 @@ try:
     from databricks_langchain import ChatDatabricks
 except Exception:
     from langchain_databricks import ChatDatabricks   # fallback for older package name
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1, max_tokens=800)
+llm_with_tools = llm.bind_tools([web_search])
+TOOLS = {"web_search": web_search}
 
 SYSTEM_PROMPT = (
     "You are a helpful research assistant. When a question needs current or factual information, "
     "call the web_search tool and ground your answer in the sources it returns. Always cite the "
     "source hosts you used. If the tool cannot support a reliable answer, say so plainly."
 )
-
-# LangChain v1 renamed the agent factory:
-#   langgraph.prebuilt.create_react_agent  ->  langchain.agents.create_agent  (deprecated old import).
-# Prefer the v1 API; fall back to the older langgraph helper only if v1 isn't installed.
-try:
-    from langchain.agents import create_agent
-    agent = create_agent(model=llm, tools=[web_search], system_prompt=SYSTEM_PROMPT)
-except ImportError:
-    from langgraph.prebuilt import create_react_agent
-    try:
-        agent = create_react_agent(llm, tools=[web_search], prompt=SYSTEM_PROMPT)
-    except TypeError:
-        agent = create_react_agent(llm, tools=[web_search], state_modifier=SYSTEM_PROMPT)
 
 # COMMAND ----------
 
@@ -186,9 +179,20 @@ except ImportError:
 # COMMAND ----------
 
 @mlflow.trace(name="web_search_agent")
-def ask(question: str) -> str:
-    result = agent.invoke({"messages": [{"role": "user", "content": question}]})
-    return result["messages"][-1].content
+def ask(question: str, max_tool_rounds: int = 4) -> str:
+    """Minimal LangChain tool-calling loop: the model may call web_search, we feed results back,
+    and repeat until it produces a final answer (or we hit the round cap)."""
+    messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=question)]
+    for _ in range(max_tool_rounds):
+        ai = llm_with_tools.invoke(messages)
+        messages.append(ai)
+        if not getattr(ai, "tool_calls", None):
+            return ai.content
+        for tc in ai.tool_calls:
+            tool = TOOLS.get(tc["name"])
+            output = tool.invoke(tc["args"]) if tool else f"Unknown tool: {tc['name']}"
+            messages.append(ToolMessage(content=str(output), tool_call_id=tc["id"]))
+    return llm_with_tools.invoke(messages).content   # final answer after the last tool round
 
 QUESTIONS = [
     "Explain Treasury bonds and the risks investors should understand.",

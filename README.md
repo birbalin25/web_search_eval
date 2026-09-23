@@ -17,7 +17,7 @@ custom deterministic scorers, and **Unity Catalog** — packaged as a **Databric
 |------|---------|
 | `web_search_eval_data_gen.py` | Notebook: creates the UC schema and seeds the `eval_cases` test set |
 | `web_search_eval_demo.py` | Notebook: **offline** eval — MCP `web_search` call with `_meta` domain policy, MLflow tracing, and `mlflow.genai.evaluate()` with judges + custom scorers |
-| `web_search_agent.py` | Notebook: **LangChain/LangGraph tool-calling agent** using a Foundation Model via the Unity AI Gateway, with `system.ai.web_search` as a tool; traces log to the shared experiment |
+| `web_search_agent.py` | Notebook: **LangChain tool-calling agent** (`ChatDatabricks.bind_tools()`) using a Foundation Model via the Unity AI Gateway, with `system.ai.web_search` as a tool; traces log to the shared experiment |
 | `web_search_eval_monitor.py` | Notebook: **production monitoring** — registers the same judges + custom scorers on the shared experiment so live agent traces are scored automatically |
 | `databricks.yml` | Asset Bundle: `dev`/`prod` targets and the `web_search_eval`, `web_search_agent`, `web_search_monitor` jobs |
 | `variables.yml` | All tunable configuration (catalog, schema, simulated flag, MCP path, LLM endpoint, domains, experiment, sample rates) |
