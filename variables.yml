@@ -11,7 +11,7 @@ variables:
     default: web_search_eval
   use_simulated:
     description: "true = offline simulated search; false = call the live system.ai.web_search MCP."
-    default: "true"
+    default: "false"
   mcp_service_path:
     description: Path of the managed web_search MCP service, appended to the workspace host.
     default: /ai-gateway/mcp-services/system.ai.web_search
