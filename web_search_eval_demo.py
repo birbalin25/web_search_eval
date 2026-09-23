@@ -127,7 +127,10 @@ def simulated(query, allowed, blocked):
 
 # COMMAND ----------
 
-import mlflow
+import logging, mlflow
+
+# Suppress harmless Py4J "extraContext not whitelisted" warning on Serverless compute
+logging.getLogger("mlflow.tracking.context.registry").setLevel(logging.ERROR)
 mlflow.set_experiment(EXPERIMENT_PATH)   # log eval runs + traces to this experiment
 
 @mlflow.trace(span_type="AGENT")
