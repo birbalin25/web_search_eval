@@ -29,10 +29,12 @@ dbutils.widgets.text("catalog", "main", "Catalog")
 dbutils.widgets.text("schema", "web_search_eval", "Schema")
 dbutils.widgets.text("use_simulated", "true", "Use simulated search (true/false)")
 dbutils.widgets.text("mcp_service_path", "/ai-gateway/mcp-services/system.ai.web_search", "MCP service path")
+dbutils.widgets.text("experiment_name", "web_search_eval_demo", "MLflow experiment name")
 
 CATALOG = dbutils.widgets.get("catalog").strip()
 SCHEMA = dbutils.widgets.get("schema").strip()
 MCP_SERVICE_PATH = dbutils.widgets.get("mcp_service_path").strip()
+EXPERIMENT_NAME = dbutils.widgets.get("experiment_name").strip()
 # Fail safe: simulate unless explicitly told otherwise, so we never hit the live service by accident.
 USE_SIMULATED = dbutils.widgets.get("use_simulated").strip().lower() != "false"
 FQ = f"`{CATALOG}`.`{SCHEMA}`"
@@ -40,8 +42,10 @@ FQ = f"`{CATALOG}`.`{SCHEMA}`"
 from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 HOST = w.config.host.rstrip("/")
+USER = w.current_user.me().user_name
 MCP_URL = f"{HOST}{MCP_SERVICE_PATH}"
-print("MCP endpoint:", MCP_URL, "| simulated:", USE_SIMULATED)
+EXPERIMENT_PATH = f"/Users/{USER}/{EXPERIMENT_NAME}"
+print("MCP endpoint:", MCP_URL, "| simulated:", USE_SIMULATED, "| experiment:", EXPERIMENT_PATH)
 
 # COMMAND ----------
 
@@ -136,7 +140,7 @@ def simulated(query, allowed, blocked):
 # COMMAND ----------
 
 import mlflow
-# Uses the default MLflow experiment (the notebook's own experiment on Databricks).
+mlflow.set_experiment(EXPERIMENT_PATH)   # log eval runs + traces to this experiment
 
 @mlflow.trace(span_type="AGENT")
 def agent(query, allowed_domains=None, blocked_domains=None):
@@ -244,7 +248,7 @@ print(json.dumps(results.metrics, indent=2, default=str))
 
 # MAGIC %md
 # MAGIC ## Results
-# MAGIC Aggregate metrics are printed above; open the **MLflow experiment** (the notebook's default experiment)
+# MAGIC Aggregate metrics are printed above; open the **MLflow experiment** (named by `experiment_name`, under your home directory)
 # MAGIC for per-case scores, rationales, and the full trace of each `web_search` call — including the exact
 # MAGIC `params._meta` that was sent. The `block_spark` case is expected to **fail `domain_compliance`** in
 # MAGIC simulated mode (a blocked domain was intentionally injected), which demonstrates the scorer working.
