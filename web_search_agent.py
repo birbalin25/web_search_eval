@@ -14,7 +14,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -qU "mlflow[databricks]>=3.1" databricks-langchain langgraph langchain-core databricks-sdk
+# MAGIC %pip install -qU "mlflow[databricks]>=3.1" "langchain>=1.0" databricks-langchain langgraph langchain-core databricks-sdk
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -156,7 +156,6 @@ try:
     from databricks_langchain import ChatDatabricks
 except Exception:
     from langchain_databricks import ChatDatabricks   # fallback for older package name
-from langgraph.prebuilt import create_react_agent
 
 llm = ChatDatabricks(endpoint=LLM_ENDPOINT, temperature=0.1, max_tokens=800)
 
@@ -166,11 +165,18 @@ SYSTEM_PROMPT = (
     "source hosts you used. If the tool cannot support a reliable answer, say so plainly."
 )
 
-# create_react_agent's system-prompt parameter name changed across langgraph versions.
+# LangChain v1 renamed the agent factory:
+#   langgraph.prebuilt.create_react_agent  ->  langchain.agents.create_agent  (deprecated old import).
+# Prefer the v1 API; fall back to the older langgraph helper only if v1 isn't installed.
 try:
-    agent = create_react_agent(llm, tools=[web_search], prompt=SYSTEM_PROMPT)
-except TypeError:
-    agent = create_react_agent(llm, tools=[web_search], state_modifier=SYSTEM_PROMPT)
+    from langchain.agents import create_agent
+    agent = create_agent(model=llm, tools=[web_search], system_prompt=SYSTEM_PROMPT)
+except ImportError:
+    from langgraph.prebuilt import create_react_agent
+    try:
+        agent = create_react_agent(llm, tools=[web_search], prompt=SYSTEM_PROMPT)
+    except TypeError:
+        agent = create_react_agent(llm, tools=[web_search], state_modifier=SYSTEM_PROMPT)
 
 # COMMAND ----------
 
